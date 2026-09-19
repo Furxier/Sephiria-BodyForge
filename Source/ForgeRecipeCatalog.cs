@@ -69,7 +69,7 @@ internal static class ForgeRecipeCatalog
             if(s.Minimum>rarity || s.Cap<=0)continue;
             specs.Add(s);byId.Add(r.Identity,r);
         }
-        var cards=ForgeRecipes.Generate(specs,rarity,storageEligible && owner.Inventory.CurrentInventoryStorage<120,random,snapshot,specialized);
+        var cards=ForgeRecipes.Generate(specs,rarity,storageEligible && owner.Inventory.CurrentInventoryStorage<120,random,snapshot,specialized,HeartEquipment.ForgeBonus(owner));
         var result=new List<ForgeRecipe>();
         foreach(var card in cards)
         {

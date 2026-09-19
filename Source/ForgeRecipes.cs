@@ -11,6 +11,7 @@ internal sealed class ForgeRecipeCard {
 }
 internal static class ForgeRecipes {
  internal static int Budget(int rarity) {if(rarity<0||rarity>4)throw new ArgumentOutOfRangeException("rarity");return new[]{30,44,64,88,120}[rarity];}
+ internal static int BoostedBudget(int rarity,int bonus) {return Budget(rarity)*(100+Math.Max(0,Math.Min(30,bonus)))/100;}
  internal static ForgeRecipeCard Build(ForgeTemplate t,Dictionary<string,ForgeRecipeSpec> specs,int budget) {
   ForgeRecipeSpec main,sub;
   if(!specs.TryGetValue(t.Main,out main)||main.Special||main.Cost<=0||main.Cap<=0)return null;
@@ -23,8 +24,8 @@ internal static class ForgeRecipes {
   }
   return new ForgeRecipeCard{Title=t.Title,Category=t.Category,Parts=parts.ToArray()};
  }
- internal static List<ForgeRecipeCard> Generate(List<ForgeRecipeSpec> pool,int rarity,bool storageAvailable,Random random,Dictionary<string,int> snapshot,bool specialized) {
-  int budget=Budget(rarity);var specs=new Dictionary<string,ForgeRecipeSpec>();
+ internal static List<ForgeRecipeCard> Generate(List<ForgeRecipeSpec> pool,int rarity,bool storageAvailable,Random random,Dictionary<string,int> snapshot,bool specialized,int forgeBonus=0) {
+  int budget=BoostedBudget(rarity,forgeBonus);var specs=new Dictionary<string,ForgeRecipeSpec>();
   foreach(var s in pool)if(s.Minimum<=rarity&&s.Cap>0&&(!s.Specialized||specialized))specs[s.Type]=s;
   var templates=new Dictionary<string,List<ForgeRecipeCard>>(StringComparer.Ordinal);var fallback=new List<ForgeTemplate>();
   foreach(var t in ForgeTemplates.All) {

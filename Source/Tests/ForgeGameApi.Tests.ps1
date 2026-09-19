@@ -31,8 +31,33 @@ try {
         UI_ItemDropZone=@('DropItem','DropSubBagItem')
         UI_SubBagIcon=@('OnBeginDrag','OnDrag','OnEndDrag','OnDrop','get_X','get_Inventory')
         UI_MessageBoxHolder=@('OpenYesNo','OpenYes')
+        Charm_StatusInstance=@('OnEnabledEffect','OnDisabledEffect','OnUpdatedLevel','GetEffectStringCount','GetEffectString')
+        Charm_Basic=@('OnCharmEffectRefreshed','OnDestroy','get_Inventory','GetItemCategory')
+        SkillController=@('add_OnGetMultipleCastCount','remove_OnGetMultipleCastCount')
+        LocalizedString=@('ToString')
+        UI_CharmTooltip=@('UpdateData')
+        UI_CharmTierDisplay=@('SetTier')
     }
     $inventory=$game.MainModule.Types | Where-Object Name -eq 'GridInventory'
+    $search=$inventory.Methods | Where-Object Name -eq 'SearchSetEffectInInventory'
+    if(@($search.Body.Instructions | Where-Object {$_.Operand -match 'Charm_Basic::GetItemCategory\('}).Count -ne 1){throw 'Native combo category counting changed'}
+    if(-not ($inventory.Fields | Where-Object {$_.Name -eq 'writePermission' -and $_.FieldType.FullName -eq 'System.Boolean'})){throw 'Inventory permission guard changed'}
+    $magic=$game.MainModule.Types | Where-Object Name -eq 'Charm_Magic'
+    if(-not (($magic.Methods | Where-Object Name -eq 'CreateMagic').Body.Instructions.Operand -contains 'MPSKILLDAMAGE')){throw 'MP ability damage reader changed'}
+    $tier=$game.MainModule.Types | Where-Object Name -eq 'UI_CharmTierDisplay'
+    if(-not ($tier.Fields | Where-Object { $_.Name -eq 'starImages' -and $_.FieldType.FullName -eq 'UnityEngine.UI.Image[]' })) {throw 'Native tier star array changed'}
+    $tooltip=$game.MainModule.Types | Where-Object Name -eq 'UI_CharmTooltip'
+    if(-not ($tooltip.Fields | Where-Object { $_.Name -eq 'levelText' -and $_.FieldType.FullName -eq 'TMPro.TMP_Text' })) {throw 'Native tooltip level label changed'}
+    $equipment=$game.MainModule.Types | Where-Object Name -eq 'Charm_StatusInstance'
+    foreach($name in @('OnDisabledEffect','OnUpdatedLevel')) {
+        $method=$equipment.Methods | Where-Object Name -eq $name
+        if(-not ($method.Body.Instructions.Operand -match 'StatusInstance::RemoveStatus') -or
+            -not ($method.Body.Instructions.Operand -match 'StatusInstance::ClearTarget')) {throw 'Native equipment cleanup changed'}
+    }
+    $needle=$game.MainModule.Types | Where-Object Name -eq 'Charm_UpCharmDamage'
+    foreach($name in @('xOffset','yOffset')) {
+        if(-not ($needle.Fields | Where-Object { $_.Name -eq $name -and $_.FieldType.FullName -eq 'System.SByte' -and $_.IsPublic })) {throw 'Native needle direction changed'}
+    }
     foreach($name in @('DecreaseSubBagItemQuantity','ServerDecreaseSubBagItemQuantity')) {
         $m=$inventory.Methods | Where-Object Name -eq $name
         if($null -eq $m -or ($m.Parameters.ParameterType.FullName -join ',') -ne 'System.SByte,System.SByte') {throw 'Subbag consume API changed'}

@@ -12,6 +12,7 @@ public static class StatusDatabase {
     public static StatusEntity GetStatusEntity(string id){return Entities.Find(e=>e.id==id);}
 }
 public class PlayerAvatar {public System.Collections.Generic.Dictionary<string,int> customStats=new System.Collections.Generic.Dictionary<string,int>();public GridInventory Inventory=new GridInventory();}
+internal static class HeartEquipment {internal static int Bonus;internal static int ForgeBonus(PlayerAvatar owner){return Bonus;}}
 public class GridInventory {public int CurrentInventoryStorage=40;public Dictionary<string,int> currentSetEffectCount=new Dictionary<string,int>();}
 internal class BodyForgeSettings {internal static BodyForgeSettings Current=new BodyForgeSettings();internal bool EnableSpecializedRewards=true;}
 internal class ForgeReward {
@@ -67,7 +68,14 @@ public static class CatalogTests {
         foreach(string type in new[]{"LeafDrop","Negotiation"}){
             owner.customStats[type]=100000;Check(ForgeRecipeCatalog.Available(ForgeReward.Parse(type+"/1"),owner),"economy has no cumulative cap");
         }
-        return "PASS: 15000 specialty sets; toggle, generic slot, rarity, budgets, mechanism limits, all specialty reachability, uncapped economy, raw units";
+        HeartEquipment.Bonus=30;bool improved=false;
+        for(int rarity=0;rarity<5;rarity++)for(int seed=0;seed<100;seed++)foreach(var card in ForgeRecipeCatalog.Generate(pool,rarity,owner,new Random(seed),false,snapshot,true)){
+            int cost=0;foreach(var reward in card.Rewards){string type=reward.Metadata.Split('/')[0];cost+=reward.Value/StatusDatabase.GetStatusEntity(type).divideForDisplay*int.Parse(ForgeBalance.Rules[type].Split(',')[1]);}
+            Check(cost<=ForgeRecipes.BoostedBudget(rarity,30),"boost respects budget");if(cost>ForgeRecipes.Budget(rarity))improved=true;
+        }
+        Check(improved && ForgeRecipes.BoostedBudget(4,30)==156,"30 percent reaches actual generated cards");
+        HeartEquipment.Bonus=0;
+        return "PASS: 15000 specialty sets, equipment budget bonus, toggle, generic slot, rarity, budgets, mechanism limits, all specialty reachability, uncapped economy, raw units";
     }
 }
 '@

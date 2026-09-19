@@ -55,6 +55,8 @@ public sealed class BodyForgeMod : HorayModBase
         host.AddComponent<BodyForgePanel>();
         try { NativeForgeHooks.Install(); }
         catch(Exception ex) { Debug.LogError("[BodyForge] 原生背包入口安装失败："+ex); }
+        try { HeartEquipment.Install(); }
+        catch(Exception ex) { Debug.LogError("[BodyForge] 心之重担安装失败："+ex); }
         Debug.Log("[BodyForge] 独立锻体 Mod 已加载，从背包进入；启用="+BodyForgeSettings.Current.Enabled);
     }
     protected override void OnModUnloaded()
@@ -64,6 +66,7 @@ public sealed class BodyForgeMod : HorayModBase
         if(host!=null) { host.SendMessage("ShutdownPanel",SendMessageOptions.DontRequireReceiver); host.SetActive(false); UnityEngine.Object.Destroy(host); }
         host=null;
         NativeForgeHooks.Uninstall();
+        HeartEquipment.Uninstall();
         AppDomain.CurrentDomain.SetData(LoaderKey,null);
     }
 }
@@ -96,6 +99,7 @@ public sealed partial class BodyForgePanel : MonoBehaviour
                 forgeMaterial=-1; forgeTarget=-1; forgeBlocked=false;
             }
             EnsureForgeProgress();
+            HeartEquipment.Tick();
             TickForgeModal();
             if(!BodyForgeSettings.Current.Enabled) StopForge("锻体已关闭");
             TickNativeFlow();
@@ -111,7 +115,7 @@ public sealed partial class BodyForgePanel : MonoBehaviour
         inputLease.Update(forgeModal!=null,owner!=null && owner.localDataStorage!=null);
     }
     private void LateUpdate() { UpdateInputBlock(); }
-    private void ShutdownPanel() { DisposeNativeUI(); StopForge("Mod 已卸载"); inputLease.Update(false,false); }
+    private void ShutdownPanel() { DisposeNativeUI(); StopForge("Mod 已卸载"); inputLease.Update(false,false); HeartEquipment.Uninstall(); }
     private void OnDisable() { ShutdownPanel(); }
     private void OnDestroy() { DisposeNativeUI(); inputLease.Update(false,false); }
     private string Name(ItemEntity item)
