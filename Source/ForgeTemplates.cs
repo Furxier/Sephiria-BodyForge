@@ -1,0 +1,72 @@
+using System;
+internal sealed class ForgeTemplate {
+ internal readonly string Category,Title,Main,Sub;internal readonly bool Fallback,OffOnly,OnOnly;
+ internal ForgeTemplate(string c,string title,string main,string sub=null,bool fallback=false,bool off=false,bool on=false){Category=c;Title=title;Main=main;Sub=sub;Fallback=fallback;OffOnly=off;OnOnly=on;}
+}
+internal static class ForgeTemplates {
+ internal static readonly ForgeTemplate[] All={
+  new ForgeTemplate("","通用·生存","Defense","MaxHP"),
+  new ForgeTemplate("","通用·暴击","Critical","CriticalDamageRate"),
+  new ForgeTemplate("","通用·迅捷","AttackSpeed","MoveSpeed"),
+  new ForgeTemplate("","通用·施法","CooldownRecoverySpeed","MPRegen"),
+  new ForgeTemplate("","通用·法力","MaxMP","MPRegen"),
+  new ForgeTemplate("","通用·闪避","Evasion","DashRecoverySpeed"),
+  new ForgeTemplate("","通用·强韧","FinalHP","MaxHP"),
+  new ForgeTemplate("","通用·增伤","FinalDamage","AttackSpeed"),
+  new ForgeTemplate("","通用·普攻","PhysicalDamage","BasicAttackDamage"),
+  new ForgeTemplate("","通用·特攻","PhysicalDamage","SpecialAttackDamage"),
+  new ForgeTemplate("","通用·物理","PhysicalDamage"),
+  new ForgeTemplate("","通用·元素","HighestElementalDamage"),
+  new ForgeTemplate("","通用·真实伤害","TrueDamage"),
+  new ForgeTemplate("STURDY","坚固·普攻","PhysicalDamage","BasicAttackDamage"),
+  new ForgeTemplate("STURDY","坚固·特攻","PhysicalDamage","SpecialAttackDamage"),
+  new ForgeTemplate("ELEMENTAL","元素·配平","HighestElementalDamage"),
+  new ForgeTemplate("ELEMENTAL","元素·暴击","HighestElementalDamage","Critical"),
+  new ForgeTemplate("ELEMENTAL","元素·游走","HighestElementalDamage","MoveSpeed"),
+  new ForgeTemplate("WINDSONG","风之歌·迅捷","AttackSpeed","MoveSpeed"),
+  new ForgeTemplate("GUARDIAN","守护·生存","Defense","MaxHP"),
+  new ForgeTemplate("GUARDIAN","守护·反攻","Defense","FinalDamage"),
+  new ForgeTemplate("GUARDIAN","守护·强健","MaxHP","FinalDamage"),
+  new ForgeTemplate("PRECISION","精密·暴击","Critical","CriticalDamageRate"),
+  new ForgeTemplate("SHADOW","影子·游走","Evasion","MoveSpeed"),
+  new ForgeTemplate("SHADOW","影子·冲刺","Evasion","DashRecoverySpeed"),
+  new ForgeTemplate("ACADEMY","学院·施法","CooldownRecoverySpeed","MPRegen"),
+  new ForgeTemplate("ACADEMY","学院·暴击","MagicCritical","MagicCriticalDamageRate",false,false,true),
+  new ForgeTemplate("ACADEMY","学院·输出","MagicDamageBonus","CooldownRecoverySpeed",false,false,true),
+  new ForgeTemplate("ACADEMY","学院·节流","MagicCostReduce","MPRegen",false,false,true),
+  new ForgeTemplate("LAKE","湖泊·法力","MaxMP","MPRegen"),
+  new ForgeTemplate("LAKE","湖泊·回流","MPRegenMultiple","MPRegen",false,false,true),
+  new ForgeTemplate("LAKE","湖泊·深池","MaxMP","FinalMP",false,false,true),
+  new ForgeTemplate("FLAMESWORD","太阳剑·伤害","FireDamage","FlameSwordDamage",false,false,true),
+  new ForgeTemplate("FLAMESWORD","太阳剑·掉落","FlameSwordDamage","FlameSwordFastFall",false,false,true),
+  new ForgeTemplate("FLAMESWORD","太阳剑·暴击","FlameSwordDamage","FlameSwordCritical",false,false,true),
+  new ForgeTemplate("FLAMESWORD","太阳剑·破甲","FlameSwordDamage","FlameSwordIgnoreDefense",false,false,true),
+  new ForgeTemplate("FROST","冰霜武具·伤害","IceDamage","FrostRelicDamage",false,false,true),
+  new ForgeTemplate("FROST","冰霜武具·充能","FrostRelicDamage","ChargingCharmBonus",false,false,true),
+  new ForgeTemplate("DARKCLOUD","乌云·雷击","LightningDamage","DarkCloudDamage",false,false,true),
+  new ForgeTemplate("DARKCLOUD","乌云·循环","DarkCloudSpeed","DarkCloudRestoreDuringBattle",false,false,true),
+  new ForgeTemplate("DARKCLOUD","乌云·容量","MinDarkCloud","DarkCloudDamage",false,false,true),
+  new ForgeTemplate("EMBER","余烬·火焰","FireDamage","BurnDamage",false,false,true),
+  new ForgeTemplate("EMBER","余烬·速率","BurnDamage","BurnSpeed",false,false,true),
+  new ForgeTemplate("EMBER","余烬·持续","BurnDamage","BurnDuration",false,false,true),
+  new ForgeTemplate("GLACIER","冰川·冻结","IceDamage","FreezeDamage",false,false,true),
+  new ForgeTemplate("MAGITECH","魔法科技·电击","LightningDamage","ElectricDamage",false,false,true),
+  new ForgeTemplate("CURSE","诅咒·侵蚀","DebuffDamage","DebuffDuration",false,false,true),
+  new ForgeTemplate("CURSE","诅咒·伤害","DebuffDamage",null,true,false,true),
+  new ForgeTemplate("COMPANION","同伴·攻防","FollowerDamage","FollowerDefense",false,false,true),
+  new ForgeTemplate("COMPANION","同伴·迅捷","FollowerDamage","FollowerAttackSpeed",false,false,true),
+  new ForgeTemplate("COMPANION","同伴·暴击","FollowerDamage","FollowerCritical",false,false,true),
+  new ForgeTemplate("COMPANION","同伴·伤害","FollowerDamage",null,true,false,true),
+  new ForgeTemplate("SAVVY","谈判·生财","Negotiation","LeafDrop",false,false,true),
+  new ForgeTemplate("SAVVY","谈判·金币","LeafDrop",null,true,false,true),
+  new ForgeTemplate("FLAMESWORD","太阳剑·火焰","FireDamage",null,false,true),
+  new ForgeTemplate("EMBER","余烬·火焰","FireDamage",null,false,true),
+  new ForgeTemplate("FROST","冰霜武具·冰霜","IceDamage",null,false,true),
+  new ForgeTemplate("GLACIER","冰川·冰霜","IceDamage",null,false,true),
+  new ForgeTemplate("DARKCLOUD","乌云·雷电","LightningDamage",null,false,true),
+  new ForgeTemplate("MAGITECH","魔法科技·雷电","LightningDamage",null,false,true)
+ };
+ internal static string MechanismCategory(string type){return type=="ChargingCharmAmplify"?"FROST":type=="BurnStack"?"EMBER":type=="ElectricStack"?"MAGITECH":type=="DashCount"?"SHADOW":type=="FlameSwordMax"?"FLAMESWORD":"";}
+ internal static string MechanismSub(string type){return type=="ChargingCharmAmplify"?"FrostRelicDamage":type=="BurnStack"?"BurnDamage":type=="ElectricStack"?"ElectricDamage":type=="DashCount"?"DashRecoverySpeed":type=="FlameSwordMax"?"FlameSwordDamage":"";}
+ internal static string MechanismTitle(string type){return type=="ChargingCharmAmplify"?"冰霜武具·触发":type=="BurnStack"?"余烬·叠层":type=="ElectricStack"?"魔法科技·叠层":type=="DashCount"?"影子·连闪":"太阳剑·储备";}
+}
