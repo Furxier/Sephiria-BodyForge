@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference='Stop'
+$ErrorActionPreference='Stop'
 $source=Get-Content (Join-Path $PSScriptRoot '../ForgeProgress.cs') -Raw -Encoding UTF8
 $fake=@'
 namespace UnityEngine {public static class Time {public static float realtimeSinceStartup=100;}}
@@ -22,6 +22,7 @@ public sealed partial class BodyForgePanel {
     private PlayerAvatar owner=new PlayerAvatar();private object forgePool=new object();private System.Random random=new System.Random();
     private ForgeTransaction forgeJob;
     private bool ForgeBusy=false,forgeBlocked=false;private float forgeRecoveryAt=0;private bool Ready(){return owner!=null;}
+    private void PollMilestoneChoice(){} private void ResetMilestoneChoice(){}
     private void CancelNative(string reason){} private void StopForge(string reason){}private void CloseForgeModal(){}
     static void Check(bool ok,string why){if(!ok)throw new System.Exception(why);}
     public static string Run(){
@@ -42,13 +43,20 @@ public sealed partial class BodyForgePanel {
         }
         Check(p.chosenRecipe==null && p.chosenMaterial==-1 && p.chosenTarget==-1,"selection reset");
         Check(object.ReferenceEquals(first,p.RecipesFor(row)),"cancel/reopen/target switch reuses candidates");
+        for(int tier=0;tier<5;tier++){
+            var linked=new ForgeRow{Instance=-100-tier,Entity=-100-tier,Rarity=tier};
+            var cards=p.RecipesFor(linked);int remaining=p.RerollsLeft(linked);p.ClearRecipeSelection();
+            Check(object.ReferenceEquals(cards,p.RecipesFor(new ForgeRow{Instance=-100-tier,Entity=-100-tier,Rarity=tier}))&&p.RerollsLeft(linked)==remaining,"complimentary cancel/reopen uses bounded per-tier candidate cache");
+            p.recipeCache.Remove(linked.Instance);Check(!object.ReferenceEquals(cards,p.RecipesFor(linked)),"complimentary confirmation advances candidates");
+        }
         p.owner.Inventory.CurrentInventoryStorage=120;
         Check(object.ReferenceEquals(first,p.RecipesFor(row)),"capacity change cannot reroll cached cards");
         var bag=new ForgeRecipe {Rewards=new[]{new ForgeReward {Kind=7}}};Check(!p.RecipeAvailable(bag),"cached bag reward disabled at cap");
         p.recipeCache.Remove(row.Instance);Check(!object.ReferenceEquals(first,p.RecipesFor(row)),"confirmed consumption advances stack candidates");
         p.owner.Inventory.CurrentInventoryStorage=40;
         p.earnedEnchants=100;for(int i=0;i<20;i++)p.TickMilestones();
-        Check(p.EarnedStorage()==10&&p.owner.Inventory.CurrentInventoryStorage==50,"milestones grant exactly ten slots");
+        Check(p.EarnedStorage()==0&&p.owner.Inventory.CurrentInventoryStorage==40,"milestones never auto grant without choice");
+        for(int i=0;i<10;i++){p.milestones.Choose(p.earnedEnchants,0,p.owner.Inventory.CurrentInventoryStorage,0,()=>p.owner.Inventory.AddStorage(1));p.milestones.Poll(p.owner.Inventory.CurrentInventoryStorage,1,()=>p.RecordReward(ForgeReward.Storage()));}
         p.TickMilestones();Check(p.EarnedStorage()==10,"no repeat expansion");
         p.RecordReward(new ForgeReward());p.RecordReward(new ForgeReward());
         Check(p.earned["HP"].Amount==6,"confirmed rewards aggregate");
@@ -82,5 +90,5 @@ public sealed partial class BodyForgePanel {
     }
 }
 '@
-Add-Type -TypeDefinition ($source+((Get-Content (Join-Path $PSScriptRoot '../ForgeBalance.cs') -Raw -Encoding UTF8) -replace 'using System.Collections.Generic;','')+((Get-Content (Join-Path $PSScriptRoot '../ForgeMilestones.cs') -Raw -Encoding UTF8) -replace 'using System;','')+$fake) -WarningAction SilentlyContinue
+Add-Type -TypeDefinition ($source+((Get-Content (Join-Path $PSScriptRoot '../SharedStatCatalog.cs') -Raw -Encoding UTF8) -replace '(?m)^using [^;]+;','')+((Get-Content (Join-Path $PSScriptRoot '../ForgeBalance.cs') -Raw -Encoding UTF8) -replace 'using System.Collections.Generic;','')+((Get-Content (Join-Path $PSScriptRoot '../ForgeMilestones.cs') -Raw -Encoding UTF8) -replace 'using System;','')+$fake) -WarningAction SilentlyContinue
 [BodyForgePanel]::Run()

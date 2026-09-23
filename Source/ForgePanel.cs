@@ -9,6 +9,7 @@ public sealed partial class BodyForgePanel
         internal ItemPosition Position;
         internal int Instance, Entity, Quantity, Count, Rarity;
         internal bool Target;
+        internal bool Complimentary;
         internal int SubBag=-1;
         internal string Name, Text;
         internal Color Color;
@@ -22,6 +23,7 @@ public sealed partial class BodyForgePanel
     private int forgeMaterial=-1, forgeTarget=-1;
     private bool forgeBlocked;
     private ForgeTransaction forgeJob;
+    private int lastForgeRarity=-1;
     private float forgeRecoveryAt;
     private void BlockForge()
     { forgeBlocked=true; forgeRecoveryAt=Time.realtimeSinceStartup+8; }
@@ -80,6 +82,7 @@ public sealed partial class BodyForgePanel
     }
     private ForgeRow ForgeSelected(int instance)
     {
+        if(nativeMaterialRow!=null && nativeMaterialRow.Complimentary && nativeMaterialRow.Instance==instance)return nativeMaterialRow;
         foreach(var row in forgeRows) if(row.Instance==instance) return row;
         return null;
     }
@@ -103,15 +106,16 @@ public sealed partial class BodyForgePanel
             var draws=chosenRecipe.Rewards;
             string result="本次所选配方：\n"+chosenRecipe.Text;
             var player=owner;
-            var port=new ForgePort(player,material.Position,material.SubBag<0?player.Inventory.inventoryMatrix[material.Position]:null,
+            var port=new ForgePort(player,material.Position,material.Complimentary?null:material.SubBag<0?player.Inventory.inventoryMatrix[material.Position]:null,
                 count==0?default(ItemPosition):target.Position,targetID,draws,()=>owner==player && LocalPlayer()==player,
-                ()=>{consumedMaterials++;recipeCache.Remove(material.Instance);},
+                ()=>{consumedMaterials++;if(material.Complimentary)externalForges++;recipeCache.Remove(material.Instance);},
                 ()=>earnedEnchants++,RecordReward,count>0,
                 index=>ForgeRecipeCatalog.Available(draws[index],player) &&
                     (draws[index].Kind!=7 || EarnedStorage()<ForgeBalance.StorageLimit),
-                material.SubBag,material.Instance,material.Quantity,material.Entity);
+                material.SubBag,material.Instance,material.Quantity,material.Entity,material.Complimentary);
             port.Validate();
-            forgeResults=result; forgeJob=new ForgeTransaction(port,count,draws.Length);
+            lastForgeRarity=material.Complimentary?material.Rarity:-1;
+            forgeResults=result; forgeJob=new ForgeTransaction(port,count,draws.Length,material.Complimentary);
             ClearRecipeSelection();
             forgeJob.Tick(Time.unscaledTime); forgeMessage=forgeJob.Message;
             if(forgeJob.Phase==ForgeTransaction.Stage.Failed) { BlockForge(); AccountFinishedJob(); }

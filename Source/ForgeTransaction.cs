@@ -32,13 +32,15 @@ internal sealed class ForgeTransaction
     private int expectedEnchant;
     private double expectedStat;
     private bool pending;
+    private readonly bool complimentary;
     internal ForgeTransaction(IForgePort port,int count)
         : this(port,count,count) { }
-    internal ForgeTransaction(IForgePort port,int count,int rewardCount)
+    internal ForgeTransaction(IForgePort port,int count,int rewardCount,bool complimentary=false)
     {
         if(count<0 || count>100) throw new ArgumentOutOfRangeException("count");
         if(rewardCount<1 || rewardCount>100) throw new ArgumentOutOfRangeException("rewardCount");
         this.port=port; this.count=count; this.rewardCount=rewardCount;
+        this.complimentary=complimentary;
     }
     internal static int RewardCount(int rarity)
     {
@@ -74,7 +76,7 @@ internal sealed class ForgeTransaction
             {
                 if(port.MaterialState()!=0) throw new InvalidOperationException("材料已变化");
                 port.Record("dispatch consume");
-                Phase=Stage.Consume; deadline=now+8; Message="等待确认吞噬一件材料…";
+                Phase=Stage.Consume; deadline=now+8; Message=complimentary?"准备联动锻体…":"等待确认吞噬一件材料…";
                 port.Consume(); return;
             }
             if(Phase==Stage.Consume)
@@ -88,7 +90,7 @@ internal sealed class ForgeTransaction
                     port.Record("confirmed consume"); Phase=count==0?Stage.Settle:Stage.Enchant;
                     port.ConfirmedConsume();
                     if(count==0)deadline=now+8;
-                    Message=count==0?"材料已消耗，等待属性刷新…":"材料已消耗，开始附魔…";
+                    Message=complimentary?(count==0?"等待属性稳定…":"开始联动附魔…"):(count==0?"材料已消耗，等待属性刷新…":"材料已消耗，开始附魔…");
                 }
                 else if(now>=deadline) throw new TimeoutException("吞噬结果未确认");
                 if(Phase==Stage.Consume) return;

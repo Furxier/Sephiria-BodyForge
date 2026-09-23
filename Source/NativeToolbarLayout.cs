@@ -2,6 +2,7 @@ using System;
 
 internal static class NativeToolbarLayout
 {
+    internal const float ButtonWidth=96,ButtonHeight=44,DetailWidth=280,DetailHeight=112;
     internal struct LedgerFlow { internal float SummaryHeight,StatusTop,StatusHeight,DetailsTop,DetailsHeight,ListTop,ListHeight; }
     internal static LedgerFlow Ledger(float height,float summary,float status,float details,bool expanded)
     {
@@ -33,9 +34,9 @@ internal static class NativeToolbarLayout
     internal static Placement Calculate(float screenWidth,float screenHeight,float left,float bottom,float right,float top,bool details)
     {
         const float gap=8;
-        float scale=ScreenScale(screenWidth,screenHeight);
-        scale=Math.Min(scale,Math.Min(Math.Max(1,screenWidth-16)/260f,Math.Max(1,screenHeight-16)/92f));
-        float width=(details?260:96)*scale, height=(details?92:34)*scale;
+        float scale=Math.Max(.85f,ScreenScale(screenWidth,screenHeight));
+        scale=Math.Min(scale,Math.Min(Math.Max(1,screenWidth-16)/DetailWidth,Math.Max(1,screenHeight-16)/DetailHeight));
+        float width=(details?DetailWidth:ButtonWidth)*scale, height=(details?DetailHeight:ButtonHeight)*scale;
         float x,y=top;
         if(right+gap+width<=screenWidth-gap) x=right+gap;
         else if(left-gap-width>=gap) x=left-gap-width;

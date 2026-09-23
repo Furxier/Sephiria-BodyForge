@@ -19,7 +19,8 @@ public static class NativeToolbarLayoutTests
             var p=NativeToolbarLayout.Calculate(width,height,width*.28f,height*.1f,width*.82f,height*.9f,details);
             Check(p.X>=8 && p.X+p.Width<=width-7.99f && p.Top<=height-7.99f && p.Top-p.Height>=7.99f,"onscreen bounds");
             float scale=NativeToolbarLayout.ScreenScale(width,height);
-            Check(System.Math.Abs(p.Width-(details?260:96)*scale)<.001,"toolbar follows resolution scale");
+            Check(System.Math.Abs(p.Width-(details?NativeToolbarLayout.DetailWidth:NativeToolbarLayout.ButtonWidth)*System.Math.Max(.85f,scale))<.001,"toolbar keeps minimum readable size and scales up at high resolution");
+            if(!details)Check(p.Height>=37.4f-.001f&&p.Width>=81.6f-.001f,"720p entry has a usable click target");
             float modal=NativeToolbarLayout.ModalScale(width,height,744,440);
             Check(modal*744<=width-24 && modal*440<=height-24,"modal stays within screen");
             Check(System.Math.Abs(modal-scale)<.001,"modal and toolbar use same readable scale");
@@ -27,7 +28,7 @@ public static class NativeToolbarLayoutTests
         }
         var screenshot=NativeToolbarLayout.Calculate(1875,1327,530,60,1580,1210,true);
         Check(NativeToolbarLayout.ModalScale(3840,2160,744,440)==2,"4K scales text and cards to twice 1080p pixels");
-        Check(screenshot.X>=1580 && screenshot.Width<280 && screenshot.Height<112,"reported screenshot: panel beside inventory");
+        Check(screenshot.X>=1580 && screenshot.Width<=280 && screenshot.Height<=130,"reported screenshot: enlarged panel beside inventory");
         var below=NativeToolbarLayout.Calculate(1280,720,8,200,1272,712,true);
         Check(below.Top<200,"use bottom gap when sides and top are full");
         foreach(bool details in new[]{false,true})

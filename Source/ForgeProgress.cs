@@ -11,12 +11,14 @@ public sealed partial class BodyForgePanel
     private readonly Dictionary<int,CachedRecipes> recipeCache=new Dictionary<int,CachedRecipes>();
     private readonly Dictionary<string,EarnedReward> earned=new Dictionary<string,EarnedReward>();
     private int earnedEnchants, consumedMaterials, completedForges, failedForges;
+    private int externalForges;
     private ForgeMilestones milestones=new ForgeMilestones();
     private DungeonManager progressDungeon;
     private PlayerAvatar progressOwner;
     private GridInventory progressInventory;
     private int progressSession;
     private int progressEpoch;
+    private long ledgerRevision;
     private ForgeRecipe chosenRecipe;
     private int chosenMaterial=-1, chosenTarget=-1;
     private ForgeTransaction accountedJob;
@@ -33,7 +35,9 @@ public sealed partial class BodyForgePanel
         forgeBlocked=false;forgeRecoveryAt=0;
         progressEpoch++;
         recipeCache.Clear(); earned.Clear(); earnedEnchants=consumedMaterials=completedForges=failedForges=0;
+        externalForges=0;
         milestones=new ForgeMilestones();
+        ResetMilestoneChoice();
         ClearRecipeSelection();
     }
     private void ClearRecipeSelection() { chosenRecipe=null; chosenMaterial=chosenTarget=-1; }
@@ -65,21 +69,18 @@ public sealed partial class BodyForgePanel
     private bool RecipeAvailable(ForgeRecipe recipe)
     { foreach(var r in recipe.Rewards) if(!ForgeRecipeCatalog.Available(r,owner) || (r.Kind==7 && (owner.Inventory.CurrentInventoryStorage>=120 || EarnedStorage()>=ForgeBalance.StorageLimit)))return false;return true; }
     private int EarnedStorage()
-    { return milestones.Claimed; }
+    { return milestones.StorageClaimed; }
     private string StorageProgress()
     {
         int due=ForgeMilestones.Entitled(earnedEnchants)-milestones.Claimed;
-        if(due>0)return "扩容待确认 "+due+" 格（详情中查看状态）";
-        return milestones.Claimed>=ForgeBalance.StorageLimit?"扩容已满":"下一格附魔进度 "+(earnedEnchants%10)+"/10";
+        if(due>0)return "里程碑奖励待领取 "+due+" 次"+(milestones.Pending?"（正在核对）":"");
+        return "下次三选一附魔进度 "+(earnedEnchants%10)+"/10";
     }
     private void TickMilestones()
     {
         if(!Ready() || ForgeBusy)return;
         if(forgeJob!=null)forgeJob.ReconcileLateEnchant();
-        if(!milestones.Pending && milestones.Claimed>=ForgeMilestones.Entitled(earnedEnchants))return;
-        milestones.Tick(earnedEnchants,owner.Inventory.CurrentInventoryStorage,Time.realtimeSinceStartup,
-            BodyForgeSettings.Current.Enabled && (!forgeBlocked || Time.realtimeSinceStartup>=forgeRecoveryAt),
-            ()=>owner.Inventory.AddStorage(1),()=>RecordReward(ForgeReward.Storage()));
+        PollMilestoneChoice();
     }
     private void RecordReward(ForgeReward reward)
     {
@@ -88,11 +89,12 @@ public sealed partial class BodyForgePanel
         entry.Amount=checked(entry.Amount+reward.Value);
         entry.LastAmount=entry.LastBatch==consumedMaterials?checked(entry.LastAmount+reward.Value):reward.Value;
         entry.LastBatch=consumedMaterials;
+        ledgerRevision++;
     }
     private string[] ProgressLines()
     {
         var result=new List<string>();
-        result.Add("消耗材料 "+consumedMaterials+" 件    已确认附魔 +"+earnedEnchants);
+        result.Add("消耗材料 "+(consumedMaterials-externalForges)+" 件 · 联动 "+externalForges+" 次    已确认附魔 +"+earnedEnchants);
         result.Add("完成 "+completedForges+" 次    中止 "+failedForges+" 次");
         result.Add("本次冒险锻体扩容 "+EarnedStorage()+" / "+ForgeBalance.StorageLimit+" 格");
         result.Add(StorageProgress());

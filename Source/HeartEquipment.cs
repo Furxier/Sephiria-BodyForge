@@ -34,6 +34,8 @@ internal static class HeartEquipment
     private static Charm_StatusInstance prefab;
     private static int originalMax;
     private static bool restoring,lastEnabled;
+    private static bool needleCompatibilityInstalled;
+    private static int needleScanTicks;
     internal static void Install()
     {
         if(harmony!=null)return;
@@ -51,6 +53,9 @@ internal static class HeartEquipment
             Patch(typeof(Charm_StatusInstance),"GetEffectString","EffectString",null);
             Patch(typeof(ItemEntity),"get_Context","Context",null);
             Patch(typeof(LocalizedString),"ToString","Flavor",null);
+            harmony.Patch(AccessTools.Method(typeof(UI_CharacterStatusPanel),"OnItemSelected",new[]{typeof(UI_NewInventoryIcon),typeof(int)}),
+                postfix:new HarmonyMethod(typeof(HeartEquipment),"HighlightTargets"));
+            Patch(typeof(CharacterDebuff_Frostbite),"get_MaxStackCount",null,"ClampFreezeThreshold");
             HeartTooltip.Install(harmony);
             HorayModAPI.OnLoadItemDatabase+=DatabaseReady;
             lastEnabled=BodyForgeSettings.Current.Enabled;
@@ -67,6 +72,8 @@ internal static class HeartEquipment
     }
     private static void DatabaseReady()
     {
+        ForgeSPCompatibility.Tick();
+        InstallNeedleCompatibility();
         var entity=ItemDatabase.FindItemById(HeartProfiles.ItemID);
         if(entity==null || entity.resourcePrefab==null)return;
         var next=entity.resourcePrefab.GetComponent<Charm_StatusInstance>();
@@ -77,6 +84,30 @@ internal static class HeartEquipment
             prefab=next;originalMax=next.maxLevel;
         }
         prefab.maxLevel=BodyForgeSettings.Current.Enabled?HeartProfiles.MaxLevel:originalMax;
+    }
+    private static void InstallNeedleCompatibility()
+    {
+        if(harmony==null || needleCompatibilityInstalled)return;
+        // Optional compatibility: discover an already loaded SPMod, never load or reference it.
+        foreach(var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var type=assembly.GetType("SPMod.ModContent.CharmStatusInheritance",false);
+            if(type==null)continue;
+            var validation=AccessTools.Method(type,"IsDependencyValid",new[]{typeof(Charm_Basic)});
+            if(validation==null || validation.ReturnType!=typeof(bool))
+                throw new MissingMethodException("SP 蓝针目标校验接口已变化");
+            harmony.Patch(validation,prefix:new HarmonyMethod(typeof(HeartEquipment),"NeedleTargetAllowed"));
+            needleCompatibilityInstalled=true;
+            RefreshInventories();
+            return;
+        }
+    }
+    private static bool NeedleTargetAllowed(Charm_Basic __0,ref bool __result)
+    {
+        if(restoring || !BodyForgeSettings.Current.Enabled || !IsHeart(__0))return true;
+        // SP's own RefreshCharm removes previous stats before validating the new target;
+        // SearchCategory also uses this check, so both copied stats and categories clear.
+        __result=false;return false;
     }
     private static bool IsHeart(Charm_Basic charm)
     {
@@ -109,7 +140,11 @@ internal static class HeartEquipment
         if(!BodyForgeSettings.Current.Enabled)return null;
         var inventory=InventoryOf(heart);
         if(inventory==null)return null;
-        int x=heart.xIdx,y=heart.yIdx-1;
+        var item=FindTarget(heart,inventory,heart.xIdx,heart.yIdx-1);
+        return item==null?null:HeartProfiles.Select(item.Charm.GetItemCategory(),ForgeSPCompatibility.CategoryAvailable);
+    }
+    private static NewItemOwnInstance FindTarget(Charm_Basic heart,GridInventory inventory,int x,int y)
+    {
         var visited=new HashSet<ItemPosition>();
         visited.Add(new ItemPosition(heart.xIdx,heart.yIdx));
         // Original gold/blue needle offset traversal, without their direct-damage-only filter.
@@ -120,10 +155,32 @@ internal static class HeartEquipment
             var item=inventory.FindItem(pos);
             if(item==null || item.Charm==null || item.EntityID==HeartProfiles.ItemID)return null;
             var needle=item.Charm as Charm_UpCharmDamage;
-            if(needle==null)return HeartProfiles.Select(item.Charm.GetItemCategory());
+            if(needle==null)return item;
             x+=needle.xOffset;y+=needle.yOffset;
         }
         return null;
+    }
+    private static void HighlightTargets(UI_NewInventoryIcon __0,UI_StoneTabletAppliedFrame[][] ___cachedStoneTabletFrames)
+    {
+        if(!BodyForgeSettings.Current.Enabled || __0==null || __0.Item==null || __0.Item.EntityID!=HeartProfiles.ItemID)return;
+        var heart=__0.Item.Charm;var inventory=InventoryOf(heart);
+        var frames=___cachedStoneTabletFrames;
+        if(inventory==null || frames==null || !resolving.Add(heart))return;
+        try
+        {
+            var current=FindTarget(heart,inventory,heart.xIdx,heart.yIdx-1);
+            foreach(var pair in inventory.inventoryMatrix)
+            {
+                int x=pair.Key.x,y=pair.Key.y;
+                if(x<0 || y<0 || x>=frames.Length || frames[x]==null || y>=frames[x].Length || frames[x][y]==null)continue;
+                var target=FindTarget(heart,inventory,x,y);
+                if(target==null || HeartProfiles.Select(target.Charm.GetItemCategory(),ForgeSPCompatibility.CategoryAvailable)==null)continue;
+                // Reuse native frames; selection changes/closing already clear them.
+                frames[x][y].SetActiveCharm(true);
+                if(heart.IsEffectEnabled && pair.Value==current)frames[x][y].LVUpSetActive(true);
+            }
+        }
+        finally { resolving.Remove(heart); }
     }
     private static bool Categories(Charm_Basic __instance,ref IEnumerable<string> __result)
     {
@@ -139,7 +196,7 @@ internal static class HeartEquipment
         foreach(var item in avatar.Inventory.inventoryMatrix.Values)
             if(item!=null && item.EntityID==HeartProfiles.ItemID && item.Charm!=null && item.Charm.IsEffectEnabled)
                 best=Math.Max(best,EnchantmentLevel(item.Charm));
-        return best;
+        return HeartProfiles.BudgetBonus(best);
     }
     private static int ComboLevel(Charm_Basic charm)
     {
@@ -152,6 +209,13 @@ internal static class HeartEquipment
     }
     internal static int EnchantmentLevel(Charm_Basic charm)
     { return Math.Max(0,Math.Min(HeartProfiles.MaxLevel,ComboLevel(charm))); }
+    internal static int RawEnchantmentLevel(Charm_Basic charm)
+    { return Math.Max(0,ComboLevel(charm)); }
+    internal static string EnchantmentDescription(Charm_Basic charm)
+    {
+        int raw=RawEnchantmentLevel(charm);
+        return "永久附魔等级："+raw+(raw>HeartProfiles.MaxLevel?"（效果按 15 级结算）":"（不含石板加级）");
+    }
     private static IEnumerable<string> CountedCategories(Charm_Basic charm)
     {
         if(restoring || !BodyForgeSettings.Current.Enabled || !IsHeart(charm))return charm.GetItemCategory();
@@ -214,7 +278,7 @@ internal static class HeartEquipment
         if(restoring || !__instance.isServer)return;
         State state;if(!states.TryGetValue(__instance,out state))return;
         state.Unbind();
-        if(state.Profile!=null && state.Profile.Category=="ACADEMY" && __instance.IsEffectEnabled && state.Level>=25)
+        if(state.Profile!=null && state.Profile.Category=="ACADEMY" && __instance.IsEffectEnabled && state.Level>=HeartProfiles.LateUnlockLevel)
         {
             state.Skills=__instance.NetworkAvatar.GetComponent<SkillController>();
             if(state.Skills!=null){state.Extra=1;state.Skills.OnGetMultipleCastCount+=state.CastCount;}
@@ -245,6 +309,9 @@ internal static class HeartEquipment
     }
     internal static void Tick()
     {
+        ForgeSPCompatibility.Tick();
+        if(harmony!=null && !needleCompatibilityInstalled && ++needleScanTicks>=120)
+        { needleScanTicks=0;InstallNeedleCompatibility(); }
         if(harmony==null || lastEnabled==BodyForgeSettings.Current.Enabled)return;
         lastEnabled=BodyForgeSettings.Current.Enabled;DatabaseReady();
         foreach(var state in new List<State>(states.Values))if(state.Charm!=null)Refreshed(state.Charm);
@@ -286,39 +353,58 @@ internal static class HeartEquipment
             HeartTooltip.Reset();
             resolving.Clear();
             if(harmony!=null)harmony.UnpatchSelf();harmony=null;
+            needleCompatibilityInstalled=false;needleScanTicks=0;
             foreach(var inventory in inventories)
                 try { RefreshInventory(inventory); } catch(Exception ex){Debug.LogError("[BodyForge] 重担连击清理失败："+ex);}
         }
-        finally { restoring=false; }
+        finally { restoring=false;ForgeSPCompatibility.Uninstall(); }
     }
     private static bool Context(ItemEntity __instance,ref string __result)
     {
         if(!BodyForgeSettings.Current.Enabled || __instance.id!=HeartProfiles.ItemID)return true;
-        __result=HeartTooltip.CurrentFlavor;return false;
+        __result=ForgeLocalization.Text(HeartTooltip.CurrentFlavor);return false;
     }
     private static bool Flavor(LocalizedString __instance,ref string __result)
     {
         if(!BodyForgeSettings.Current.Enabled || __instance.key!="Item_MindBurden_FlavorText")return true;
-        __result=HeartTooltip.CurrentFlavor;return false;
+        __result=ForgeLocalization.Text(HeartTooltip.CurrentFlavor);return false;
     }
+    // Preserve at least one required stack, including reductions supplied by other equipment.
+    private static void ClampFreezeThreshold(ref int __result)
+    { if(BodyForgeSettings.Current.Enabled)__result=Math.Max(1,__result); }
     private static bool EffectCount(Charm_StatusInstance __instance,ref int __result)
     {
         if(!BodyForgeSettings.Current.Enabled || !IsHeart(__instance))return true;
         var profile=Resolve(__instance);
-        __result=2+(profile==null?0:profile.Stats.Length+(profile.Category=="ACADEMY"?1:0));return false;
+        __result=3+(profile==null?0:profile.Stats.Length+(profile.Category=="ACADEMY"?1:0));return false;
+    }
+    // Native keyword translations can embed sprites inside the attribute name.
+    // Move only sprite tags, preserving native colors, links and number formatting.
+    private static readonly System.Text.RegularExpressions.Regex statIconTags=
+        new System.Text.RegularExpressions.Regex(@"<sprite\b[^>]*>",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    internal static string LeadingStatIcons(string text)
+    {
+        if(string.IsNullOrEmpty(text))return text;
+        // Expand nested native keyword tags before relocating their generated sprites.
+        text=KeywordDatabase.Convert(text,false,true,true,false);
+        var icons=new System.Text.StringBuilder();
+        string label=statIconTags.Replace(text,match=>{icons.Append(match.Value).Append(" ");return "";});
+        return icons.Length==0?text:icons.ToString()+label.Trim();
     }
     private static bool EffectString(Charm_StatusInstance __instance,int __0,int __1,ref string __result)
     {
         if(!BodyForgeSettings.Current.Enabled || !IsHeart(__instance))return true;
         var profile=Resolve(__instance);int level=EnchantmentLevel(__instance);
-        if(__0==0)__result=profile==null?"指向上方神器，随其羁绊切换自身属性及连击。成长上限 30 级。":"当前适配："+profile.Name+" · 连击 +"+HeartProfiles.ComboCount(ComboLevel(__instance))+"（按附魔等级）";
-        else if(__0==1)__result="锻体属性预算 +"+level+"%";
-        else if(profile!=null && __0<=profile.Stats.Length+1)
+        if(__0==0)__result=EnchantmentDescription(__instance);
+        else if(__0==1)__result=profile==null?"指向上方神器，随其羁绊切换自身属性及连击。成长上限 15 级。":"当前适配："+profile.Name+" · 连击 <color=#80E878>+"+HeartProfiles.ComboCount(ComboLevel(__instance))+"</color>（按附魔等级）";
+        else if(__0==2)__result="锻体属性预算 <color=#80E878>+"+HeartProfiles.BudgetBonus(level)+"%</color>";
+        else if(profile!=null && __0<=profile.Stats.Length+2)
         {
-            var stat=profile.Stats[__0-2];int value=stat.Values[level];
-            __result=value==0?null:StatusDatabase.CreateStatusEntity(stat.ID,value).ToString(true,false,true,Color.white);
+            var stat=profile.Stats[__0-3];int value=stat.Values[level];
+            __result=value==0?null:LeadingStatIcons(StatusDatabase.CreateStatusEntity(stat.ID,value).ToString(true,true,true,new Color(128f/255,232f/255,120f/255,1)));
         }
-        else __result=profile!=null && profile.Category=="ACADEMY" && level>=25?"魔法书额外释放 +1 次":null;
+        else __result=profile!=null && profile.Category=="ACADEMY" && level>=HeartProfiles.LateUnlockLevel?"魔法书额外释放 <color=#80E878>+1 次</color>":null;
+        __result=ForgeLocalization.Text(__result);
         return false;
     }
 }

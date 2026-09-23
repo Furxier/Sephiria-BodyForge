@@ -14,11 +14,12 @@ public class NewItemOwnInstance { public int InstanceID,EntityID,Quantity=1; }
 public struct ItemMetadata { public int instanceID,entityID,quantity; }
 public class UI_SubBagIcon { public GridInventory Inventory; public sbyte X; }
 public class GridInventory { public System.Collections.Generic.Dictionary<sbyte,ItemMetadata> subBagMatrix=new System.Collections.Generic.Dictionary<sbyte,ItemMetadata>(); public System.Collections.Generic.Dictionary<ItemPosition,NewItemOwnInstance> inventoryMatrix=new System.Collections.Generic.Dictionary<ItemPosition,NewItemOwnInstance>(); }
-public class PlayerAvatar { public GridInventory Inventory=new GridInventory(); }
+public class PlayerAvatar { public GridInventory Inventory=new GridInventory();public bool IsInBattle; }
 public class UI_CharacterStatusPanel
 {
     public enum EInventoryMode { None,Enchant }
     public bool IsOpened=true; public PlayerAvatar PlayerAvatar; public EInventoryMode InventoryMode;
+    public void Open(){IsOpened=true;}
 }
 public class UI_NewInventoryIcon { public GridInventory Inventory; public NewItemOwnInstance Item; }
 public class UI_ShopPanel { public bool IsOpened; }
@@ -42,6 +43,7 @@ public class UI_MessageBoxHolder
 }
 public class UIManager
 {
+    public System.Collections.Generic.List<object> CurrentControlStack=new System.Collections.Generic.List<object>();
     public static UIManager Instance=new UIManager();
     public System.Collections.Generic.Dictionary<System.Type,object> Items=new System.Collections.Generic.Dictionary<System.Type,object>();
     public T GetElement<T>() where T:new()
@@ -50,9 +52,15 @@ public class UIManager
 public class DungeonManager { public static DungeonManager Instance=new DungeonManager(); }
 internal static class NativeForgeHooks { internal static bool Installed=true; }
 internal class BodyForgeSettings { public bool Enabled=true; public static BodyForgeSettings Current=new BodyForgeSettings(); }
+internal static class ForgeTransaction {internal static int RewardCount(int rarity){return new[]{0,1,2,3,5}[rarity];}}
 public sealed partial class BodyForgePanel
 {
-    private class ForgeRow { internal ItemPosition Position; internal int SubBag=-1; internal int Instance,Entity,Quantity=1,Count=2; internal bool Target; internal string Name="道具"; }
+    private class ForgeRow { internal ItemPosition Position; internal int SubBag=-1; internal int Instance,Entity,Rarity,Quantity=1,Count=2; internal bool Target,Complimentary=false; internal string Name="道具"; }
+    internal static BodyForgePanel Instance;public bool isActiveAndEnabled=true;
+    private float nextNativeScan;
+    private PlayerAvatar LocalPlayer(){return owner;}
+    private void EnsureForgeProgress(){}
+    private void TickNativeUI(){Check(nextNativeScan==0,"external entry scans native UI");nativePanel=UIManager.Instance.GetElement<UI_CharacterStatusPanel>();nativePanel.PlayerAvatar=owner;}
     private PlayerAvatar owner=new PlayerAvatar();
     private UI_CharacterStatusPanel nativePanel;
     private bool forgeBlocked,busy;
@@ -145,16 +153,35 @@ public sealed partial class BodyForgePanel
         p.owner.Inventory.subBagMatrix[0]=new ItemMetadata {instanceID=1,entityID=sub.Entity,quantity=1};
         p.BeginNativeForge();p.HandleNativeSubBagClick(UnityEngine.EventSystems.PointerEventData.InputButton.Left,new UI_SubBagIcon {Inventory=p.owner.Inventory,X=0});
         Check(p.nativeStep==NativeStep.Target,"colored subbag material requires target");p.Click(2);p.pickRecipe();UIManager.Instance.GetElement<UI_MessageBoxHolder>().Confirm();Check(p.starts==1,"subbag material with main target confirms once");
-        p=Setup();p.milestones.Tick(10,40,0,true,()=>{},()=>{});p.BeginNativeForge();
+        p=Setup();p.milestones.Choose(10,0,40,0,()=>{});p.BeginNativeForge();
         Check(!p.NativeActive && p.starts==0,"pending expansion blocks entry without consuming");
-        p=Setup();p.SelectPair();p.milestones.Tick(10,40,0,true,()=>{},()=>{});
+        p=Setup();p.SelectPair();p.milestones.Choose(10,0,40,0,()=>{});
         UIManager.Instance.GetElement<UI_MessageBoxHolder>().Confirm();
         Check(p.starts==0 && !p.NativeActive && p.resultsShown==0,"expansion arriving during selection cannot replay old success");
-        return "PASS: main/subbag selection, confirmation, expansion race, cancellation and stale callbacks";
+        for(int rarity=0;rarity<5;rarity++){
+            p=Setup();var panel=UIManager.Instance.GetElement<UI_CharacterStatusPanel>();panel.IsOpened=false;
+            Check(p.StartExternalForge(rarity)==null&&panel.IsOpened,"external entry opens native backpack");
+            Check(p.nativeMaterialRow.Complimentary&&p.nativeMaterialRow.Instance==-100-rarity&&p.nativeMaterialRow.Count==new[]{0,1,2,3,5}[rarity],"external tiers and persistent candidate keys");
+            Check(p.StartExternalForge(rarity)!=null,"repeated external entry rejected while active");
+            Check(p.nativeStep==(rarity==0?NativeStep.Choice:NativeStep.Target),"white skips target, colored requires target");
+            if(rarity>0)p.Click(2);p.pickRecipe();var h=UIManager.Instance.GetElement<UI_MessageBoxHolder>();var callback=h.Box.yes;h.Confirm();callback();
+            Check(p.starts==1,"external confirmation starts once");
+            p.CancelNative("stop");Check(!p.NativeActive&&!p.NativeRowUnchanged(new ForgeRow{Complimentary=true}),"external cancel invalidates virtual material");
+        }
+        p=Setup();Check(p.StartExternalForge(-1)!=null&&p.StartExternalForge(5)!=null&&!p.NativeActive,"invalid external rarity rejected");
+        BodyForgeSettings.Current.Enabled=false;Check(p.StartExternalForge(0)!=null,"disabled mod rejects external entry");
+        p=Setup();p.forgeBlocked=true;Check(p.StartExternalForge(0)!=null,"failure lock cannot be bypassed");
+        p=Setup();UIManager.Instance.GetElement<UI_CharacterStatusPanel>().IsOpened=false;p.owner.IsInBattle=true;Check(p.StartExternalForge(0)!=null,"combat opening blocked");
+        p=Setup();UIManager.Instance.GetElement<UI_CharacterStatusPanel>().IsOpened=false;UIManager.Instance.CurrentControlStack.Add(new object());Check(p.StartExternalForge(0)!=null,"other controlled screen not replaced");
+        Instance=Setup();ForgeExternalBridge.Install();var entry=System.AppDomain.CurrentDomain.GetData(ForgeExternalBridge.Key) as System.Func<int,string>;
+        Check(entry!=null,"optional BCL bridge registered");Instance.isActiveAndEnabled=false;Check(entry(0)!=null,"disabled component bridge rejected");
+        ForgeExternalBridge.Uninstall();Check(System.AppDomain.CurrentDomain.GetData(ForgeExternalBridge.Key)==null,"bridge released on unload");
+        var replacement=new System.Func<int,string>(r=>null);System.AppDomain.CurrentDomain.SetData(ForgeExternalBridge.Key,replacement);ForgeExternalBridge.Uninstall();Check(object.ReferenceEquals(System.AppDomain.CurrentDomain.GetData(ForgeExternalBridge.Key),replacement),"old bridge cannot clear replacement");System.AppDomain.CurrentDomain.SetData(ForgeExternalBridge.Key,null);
+        return "PASS: native and five complimentary tiers, target selection, repeated entry, confirmation, cancellation, API lifecycle and context guards";
     }
 }
 '@
-Add-Type -TypeDefinition ($source+((Get-Content (Join-Path $PSScriptRoot '../ForgeMilestones.cs') -Raw) -replace 'using System;','')+$stubs) -WarningAction SilentlyContinue
+Add-Type -TypeDefinition ($source+((Get-Content (Join-Path $PSScriptRoot '../ForgeMilestones.cs') -Raw) -replace 'using System;','')+((Get-Content (Join-Path $PSScriptRoot '../ForgeExternal.cs') -Raw) -replace '(?m)^using [^;]+;','')+$stubs) -WarningAction SilentlyContinue
 [BodyForgePanel]::RunTests()
 
 

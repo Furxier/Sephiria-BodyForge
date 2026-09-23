@@ -19,7 +19,8 @@ public class GridInventory {
     public System.Collections.Generic.List<StoredItem> temporaryInventory=new System.Collections.Generic.List<StoredItem>();
     public event System.Action OnCharmEffectRefreshedForServer,OnCharmEffectRefreshedForClient;
     public int Listeners {get{return (OnCharmEffectRefreshedForServer==null?0:OnCharmEffectRefreshedForServer.GetInvocationList().Length)+(OnCharmEffectRefreshedForClient==null?0:OnCharmEffectRefreshedForClient.GetInvocationList().Length);}}
-    public void DecreaseItemQuantity(int x,int y,int n){}
+    public int MainBagSends;
+    public void DecreaseItemQuantity(int x,int y,int n){MainBagSends++;}
     public int SubBagSends;
     public void DecreaseSubBagItemQuantity(sbyte x,int n){SubBagSends++;}
     public void Enchant(ItemPosition p){}
@@ -28,6 +29,7 @@ public class GridInventory {
 public class PlayerAvatar {public GridInventory Inventory=new GridInventory();public bool isServer;public int Sends;public void AddOrphanedStatusInstance(object s){Sends++;}public void CmdAddOrphanedStatusInstance(string s){Sends++;}}
 public class DungeonManager {public static DungeonManager Instance=new DungeonManager();public int sessionSerial=1;public string GetGlobalItemStatValue(int id,string key){return "0";}}
 public static class StatusDatabase {public static object CreateStatusEntity(string s){return s;}}
+internal static class ForgePermanentStats {internal static void Apply(PlayerAvatar p,string s){p.AddOrphanedStatusInstance(StatusDatabase.CreateStatusEntity(s));}}
 internal class ForgeReward {internal string Metadata="HP/1";internal int Kind=0;internal double Delta=1;internal double Read(PlayerAvatar p){return 0;}}
 public static class ForgePortTests {
     static void Check(bool value,string message){if(!value)throw new System.Exception(message);}
@@ -69,7 +71,21 @@ public static class ForgePortTests {
             bool rejected=false;try{port.Consume();}catch(System.InvalidOperationException){rejected=true;}Check(rejected && inv.SubBagSends==1,"no second consumption after changed state");
             port.Close();Check(inv.Listeners==0,"subbag cleanup");
         }
-        return "PASS: host/client subbag consumption, stack and movement guards, event cleanup, inventory/session/dungeon guards";
+        foreach(bool server in new[]{false,true}) {
+            var p=new PlayerAvatar{isServer=server};var inv=p.Inventory;
+            var port=new ForgePort(p,new ItemPosition(),null,new ItemPosition(),-1,new[]{new ForgeReward()},()=>true,()=>{},()=>{},r=>{},false,null,-1,-100,1,0,true);
+            port.Validate();Check(port.MaterialState()==0,"complimentary starts without material");port.Consume();
+            Check(port.MaterialState()==1&&inv.MainBagSends==0&&inv.SubBagSends==0,"complimentary consumption never calls inventory mutation");
+            for(int i=0;i<3;i++){UnityEngine.Time.frameCount++;bool ignored=port.EffectsReady;}
+            Check(port.EffectsReady,"white complimentary settles without waiting for nonexistent inventory RPC");
+            bool twice=false;try{port.Consume();}catch(System.InvalidOperationException){twice=true;}Check(twice,"complimentary cannot be consumed twice");
+            port.ApplyStat(0);Check(p.Sends==1,"complimentary uses same host/client reward dispatch");
+            port.Close();Check(inv.Listeners==0,"complimentary releases native refresh events");
+            var target=new NewItemOwnInstance {InstanceID=2};inv.inventoryMatrix[new ItemPosition()]=target;
+            var colored=new ForgePort(p,new ItemPosition(),null,new ItemPosition(),2,new[]{new ForgeReward()},()=>true,()=>{},()=>{},r=>{},true,null,-1,-101,1,0,true);
+            colored.Validate();inv.inventoryMatrix.Clear();Check(Rejects(colored),"complimentary colored forge still requires unchanged target");colored.Close();
+        }
+        return "PASS: host/client paid and complimentary grants, zero inventory mutation, white settlement, target/connection guards, event cleanup and no duplicate consumption";
     }
 }
 '@

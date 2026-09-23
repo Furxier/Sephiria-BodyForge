@@ -20,11 +20,15 @@ $arguments += '/reference:' + (Join-Path $modDir '0Harmony.dll')
 foreach ($source in @('BodyForge.cs','ForgePanel.cs','ForgeRewards.cs','ForgePort.cs','ForgeTransaction.cs','ForgeEffectGate.cs','SharedPanelInput.cs','NativeForgeHooks.cs','NativeForgeFlow.cs','NativeForgeUI.cs','NativeToolbarLayout.cs','ForgeRecipes.cs','ForgeBalance.cs','ForgeAffinity.cs','ForgeTemplates.cs','ForgeRecipeCatalog.cs','ForgeProgress.cs','ForgeModalUI.cs','ForgeLedgerUI.cs')) { $arguments += (Join-Path $PSScriptRoot $source) }
 $arguments += (Join-Path $PSScriptRoot 'ForgeMilestones.cs')
 $arguments += (Join-Path $PSScriptRoot 'HeartProfiles.cs')
+$arguments += (Join-Path $PSScriptRoot 'SharedStatCatalog.cs')
+$arguments += (Join-Path $PSScriptRoot 'ForgeSPCompatibility.cs')
+$arguments += (Join-Path $PSScriptRoot 'ForgeLedgerRefresh.cs')
+$arguments += (Join-Path $PSScriptRoot 'ForgePermanentStats.cs')
+$arguments += (Join-Path $PSScriptRoot 'ForgeExternal.cs')
 $arguments += (Join-Path $PSScriptRoot 'HeartEquipment.cs')
 $arguments += (Join-Path $PSScriptRoot 'HeartTooltip.cs')
+$arguments += (Join-Path $PSScriptRoot 'ForgeLocalization.cs')
+$arguments += (Join-Path $PSScriptRoot 'ForgeLocalizedLabel.cs')
+$arguments += (Join-Path $PSScriptRoot 'ForgeMilestoneUI.cs')
 & $compiler $arguments
 if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
-
-
-
-

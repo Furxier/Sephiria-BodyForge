@@ -1,6 +1,6 @@
 {
   "modName": "锻体",
-  "modVersion": "2.8.5",
+  "modVersion": "2.8.37",
   "modAuthor": "Local",
   "dllFile": "BodyForge.dll",
   "entryClass": "BodyForgeMod"

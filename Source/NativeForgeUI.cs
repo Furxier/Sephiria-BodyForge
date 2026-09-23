@@ -38,13 +38,15 @@ public sealed partial class BodyForgePanel
         if(nativeToolbar.gameObject.activeSelf!=visible) nativeToolbar.gameObject.SetActive(visible);
         if(!visible) return;
         bool details=NativeActive || forgeBlocked;
-        nativeToolbar.sizeDelta=new Vector2(details?260:96,details?92:34);
+        nativeToolbar.sizeDelta=new Vector2(details?NativeToolbarLayout.DetailWidth:NativeToolbarLayout.ButtonWidth,
+            details?NativeToolbarLayout.DetailHeight:NativeToolbarLayout.ButtonHeight);
         nativeHintText.gameObject.SetActive(details);
+        nativeBackground.enabled=details;
         PositionNativeToolbar();
         nativeButton.interactable=true;
         string button="锻体";
-        if(lastNativeButton!=button) { nativeButtonText.text=button; lastNativeButton=button; }
-        if(lastNativeHint!=nativeHint) { nativeHintText.text=nativeHint; lastNativeHint=nativeHint; }
+        if(lastNativeButton!=button) { ForgeLocalizedLabel.Set(nativeButtonText,button); lastNativeButton=button; }
+        if(lastNativeHint!=nativeHint) { ForgeLocalizedLabel.Set(nativeHintText,nativeHint); lastNativeHint=nativeHint; }
     }
     private void CreateNativeToolbar()
     {
@@ -53,29 +55,32 @@ public sealed partial class BodyForgePanel
         TMP_Text source=nativePanel.selectItemScreenText;
         if(source==null) source=nativePanel.GetComponentInChildren<TMP_Text>(true);
         if(source==null || source.font==null) return;
-        nativeToolbar=Rect("BodyForgeNativeToolbar",parent,new Vector2(96,34),Vector2.zero);
+        nativeToolbar=Rect("BodyForgeNativeToolbar",parent,new Vector2(NativeToolbarLayout.ButtonWidth,NativeToolbarLayout.ButtonHeight),Vector2.zero);
         nativeBackground=nativeToolbar.gameObject.AddComponent<Image>();
         nativeBackground.color=new Color(.09f,.10f,.13f,.98f); nativeBackground.raycastTarget=true;
         ApplyNativeFrame(nativeBackground,false);
-        var buttonRect=Rect("ForgeButton",nativeToolbar,new Vector2(96,34),Vector2.zero);
+        var buttonRect=Rect("ForgeButton",nativeToolbar,new Vector2(NativeToolbarLayout.ButtonWidth,NativeToolbarLayout.ButtonHeight),Vector2.zero);
         var graphic=buttonRect.gameObject.AddComponent<Image>();
         graphic.color=Color.white;
         var draggable=buttonRect.gameObject.AddComponent<ForgeDraggableButton>();
         draggable.Moved=MoveNativeToolbar;
         nativeButton=draggable; nativeButton.targetGraphic=graphic;
         var colors=ColorBlock.defaultColorBlock;
-        colors.normalColor=new Color(.58f,.36f,.08f,1);
-        colors.highlightedColor=new Color(.76f,.51f,.14f,1);
+        colors.normalColor=new Color(.24f,.16f,.25f,1);
+        colors.highlightedColor=new Color(.36f,.25f,.35f,1);
         colors.selectedColor=colors.highlightedColor;
-        colors.pressedColor=new Color(.40f,.24f,.05f,1);
+        colors.pressedColor=new Color(.16f,.10f,.18f,1);
         colors.disabledColor=new Color(.24f,.23f,.20f,1);
         nativeButton.colors=colors;
-        ApplyNativeButton(nativeButton,graphic);
+        // Opaque compact tab: the native toggle sprite has a translucent center.
+        var border=buttonRect.gameObject.AddComponent<Outline>();
+        border.effectColor=new Color(.53f,.40f,.47f,1);
+        border.effectDistance=new Vector2(2,-2);border.useGraphicAlpha=false;
         nativeButton.onClick.AddListener(NativeButtonClicked);
-        nativeButtonText=NativeText("Text",buttonRect,new Vector2(88,32),new Vector2(4,-1),source);
-        nativeButtonText.fontSize=18; nativeButtonText.color=new Color(1,.96f,.83f,1);
+        nativeButtonText=NativeText("Text",buttonRect,new Vector2(NativeToolbarLayout.ButtonWidth-16,NativeToolbarLayout.ButtonHeight-8),new Vector2(8,-4),source);
+        nativeButtonText.fontSize=24; nativeButtonText.color=new Color(1,.96f,.83f,1);
         nativeButtonText.alignment=TextAlignmentOptions.Center;
-        nativeHintText=NativeText("Instructions",nativeToolbar,new Vector2(248,50),new Vector2(6,-38),source);
+        nativeHintText=NativeText("Instructions",nativeToolbar,new Vector2(268,58),new Vector2(6,-NativeToolbarLayout.ButtonHeight-6),source);
         nativeHintText.alignment=TextAlignmentOptions.TopLeft; nativeHintText.fontSize=14;
         lastNativeButton=null; lastNativeHint=null;
         nativeToolbar.SetAsLastSibling();
@@ -182,6 +187,9 @@ public sealed partial class BodyForgePanel
         CancelNative("Mod 已卸载");
         if(nativeToolbar!=null) { nativeToolbar.gameObject.SetActive(false); UnityEngine.Object.Destroy(nativeToolbar.gameObject); }
         nativeToolbar=null; nativePanel=null;
+
+
+
         if(Instance==this) Instance=null;
     }
 }

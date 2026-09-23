@@ -11,7 +11,7 @@ internal sealed class ForgeRecipe
 internal static class ForgeRecipeCatalog
 {
     private static readonly Dictionary<string,string> Rules=ForgeBalance.Rules;
-    private static string RuleType(StatusEntity entity)
+    internal static string RuleType(StatusEntity entity)
     {
         string type=(entity.className??"").Replace("StatusInstance_","");
         if(Rules.ContainsKey(type))return type;
@@ -20,6 +20,10 @@ internal static class ForgeRecipeCatalog
         foreach(string rule in Rules.Keys)if(rule.ToUpperInvariant()==key)return rule;
         switch(key)
         {
+            case "STATALLPLAYERDEFENSE":return "TeamDefense";
+            case "STATALLPLAYERALLDAMAGE":return "TeamDamage";
+            case "STATALLPLAYERELEMENTALDAMAGE":return "TeamElement";
+            case "STATALLPLAYERCRIT":return "TeamCritical";
             case "DAMAGEREDUCTION":return "Defense";
             case "DASHRECOVERY":return "DashRecoverySpeed";
             case "CRITICALDAMAGEBONUS":return "CriticalDamageRate";
@@ -31,7 +35,11 @@ internal static class ForgeRecipeCatalog
     internal static List<ForgeReward> Load()
     {
         var found=new List<ForgeReward>(); var unique=new HashSet<string>();
-        var entities=Resources.LoadAll<StatusEntity>("Status");
+        var all=new List<StatusEntity>(Resources.LoadAll<StatusEntity>("Status"));
+        // SP creates these at runtime, so Resources.LoadAll does not discover them.
+        if(ForgeSPCompatibility.CategoryAvailable("PARTY"))foreach(string id in ForgeSPCompatibility.PartyIDs)
+        { var entity=StatusDatabase.GetStatusEntity(id);if(entity!=null)all.Add(entity); }
+        var entities=all.ToArray();
         Array.Sort(entities,(a,b)=>string.CompareOrdinal(a.id,b.id));
         foreach(var entity in entities)
         {
@@ -51,6 +59,8 @@ internal static class ForgeRecipeCatalog
     internal static ForgeRecipe[] Generate(List<ForgeReward> pool,int rarity,PlayerAvatar owner,System.Random random,bool storageEligible,Dictionary<string,int> snapshot,bool specialized)
     {
         var specs=new List<ForgeRecipeSpec>();var byId=new Dictionary<string,ForgeReward>();
+        var enabledSnapshot=new Dictionary<string,int>(StringComparer.Ordinal);
+        foreach(var pair in snapshot)if(ForgeSPCompatibility.CategoryAvailable(pair.Key))enabledSnapshot[pair.Key]=pair.Value;
         foreach(var r in pool)
         {
             ForgeRecipeSpec s;
@@ -69,7 +79,7 @@ internal static class ForgeRecipeCatalog
             if(s.Minimum>rarity || s.Cap<=0)continue;
             specs.Add(s);byId.Add(r.Identity,r);
         }
-        var cards=ForgeRecipes.Generate(specs,rarity,storageEligible && owner.Inventory.CurrentInventoryStorage<120,random,snapshot,specialized,HeartEquipment.ForgeBonus(owner));
+        var cards=ForgeRecipes.Generate(specs,rarity,storageEligible && owner.Inventory.CurrentInventoryStorage<120,random,enabledSnapshot,specialized,HeartEquipment.ForgeBonus(owner));
         var result=new List<ForgeRecipe>();
         foreach(var card in cards)
         {
@@ -97,6 +107,8 @@ internal static class ForgeRecipeCatalog
     {
         if(reward.Kind==7)return true;
         string type=RuleType(StatusDatabase.GetStatusEntity(reward.Metadata.Split('/')[0]));
+        string required=type=="Luck"?"FORTUNE":type=="DashAttackDamage"?"COMET":type=="FinalWeaponDamage"?"WEAPON":type.StartsWith("Team",StringComparison.Ordinal)?"PARTY":null;
+        if(required!=null && !ForgeSPCompatibility.CategoryAvailable(required))return false;
         if(ForgeBalance.IsSpecialized(type) && !BodyForgeSettings.Current.EnableSpecializedRewards)return false;
         int limit=ForgeBalance.NativeLimit(type);
         return limit==0 || reward.Read(owner)+reward.Value<=limit;

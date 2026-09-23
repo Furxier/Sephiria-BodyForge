@@ -95,7 +95,7 @@ public sealed partial class BodyForgePanel
         label.margin=Vector4.zero;
         label.fontSizeMin=Mathf.Min(12,size);label.fontSizeMax=size;
         label.enableAutoSizing=true;
-        label.text=text;label.fontSize=size;label.color=color;label.alignment=TextAlignmentOptions.TopLeft;
+        ForgeLocalizedLabel.Set(label,text);label.fontSize=size;label.color=color;label.alignment=TextAlignmentOptions.TopLeft;
         return label;
     }
     private Button ModalButton(RectTransform parent,string text,float x,float y,float width,float height,Action action)
@@ -142,6 +142,7 @@ public sealed partial class BodyForgePanel
     }
     private void OpenForgeHub()
     {
+        if(CanChooseMilestone()){OpenMilestoneChoices();return;}
         EnsureForgeProgress();
         var card=BeginForgeModal("锻体",540,300,null);
         ModalText(card,NativeActive?nativeHint:forgeMessage,22,65,496,80,18,Color.white);
@@ -161,7 +162,7 @@ public sealed partial class BodyForgePanel
         var cards=RecipesFor(material);
         var card=BeginForgeModal("选择锻体配方",744,440,cancel);
         string targetText=material.Count==0?"\n仅获得属性奖励，无需附魔目标。":"    目标："+target.Name+"\n目标附魔 +"+material.Count+"；选择一份配方，获得其中全部奖励。";
-        ModalText(card,"吞噬："+material.Name+" ×1"+targetText,22,60,700,60,17,Color.white);
+        ModalText(card,(material.Complimentary?"联动："+material.Name+"（无需材料）":"吞噬："+material.Name+" ×1")+targetText,22,60,700,60,17,Color.white);
         for(int i=0;i<cards.Length;i++)
         {
             var recipe=cards[i];float x=22+i*238;
@@ -185,7 +186,7 @@ public sealed partial class BodyForgePanel
             if(!ForgeRowsUnchanged(material,target)){CancelForgeModal();return;}
             if(RerollRecipes(material))OpenRecipeChoices(material,target,picked,cancel);
         }).interactable=remaining>0;
-        ModalText(card,"按首次生成时的连击抽取；重掷不更新连击，取消不恢复次数。\n每消耗一件材料，下一件重新读取连击和重掷次数。",22,388,700,44,15,new Color(.86f,.82f,.75f));
+        ModalText(card,"按首次生成时的连击抽取；重掷不更新连击，取消不恢复次数。\n"+(material.Complimentary?"本次确认后，下次联动重新读取连击和重掷次数。":"每消耗一件材料，下一件重新读取连击和重掷次数。"),22,388,700,44,15,new Color(.86f,.82f,.75f));
         modalValid=()=>Ready() && ForgeRowsUnchanged(material,target) && BodyForgeSettings.Current.Enabled;
     }
     private void OpenStandaloneRecipes(ForgeRow material,ForgeRow target)
@@ -195,13 +196,13 @@ public sealed partial class BodyForgePanel
     private void ShowForgeConfirmation(ForgeRow material,ForgeRow target,Action confirm,Action cancel)
     {
         var card=BeginForgeModal("确认锻体",560,390,cancel);
-        ModalText(card,"消耗  "+material.Name+" ×1",24,66,512,48,18,new Color(.91f,.83f,.76f));
+        ModalText(card,material.Complimentary?"联动  "+material.Name+"（无需材料）":"消耗  "+material.Name+" ×1",24,66,512,48,18,new Color(.91f,.83f,.76f));
         ModalText(card,material.Count==0?"白色材料：仅获取所选属性，不附魔。":"附魔  "+target.Name+" +"+material.Count,24,118,512,48,18,new Color(1,.86f,.60f));
         var rewards=Rect("Rewards",card,new Vector2(512,98),new Vector2(24,-172));
         PanelGraphic(rewards,new Color(.24f,.19f,.28f,1));
         for(int r=0;r<chosenRecipe.Rewards.Length;r++)
             ModalReward(rewards,chosenRecipe.Rewards[r],14,14+r*36,484,36,20);
-        ModalText(card,"材料将被消耗，原有属性与羁绊随之移除。",24,286,512,30,16,new Color(.79f,.69f,.68f));
+        ModalText(card,material.Complimentary?"不消耗道具；附魔和属性计入本次冒险收益。":"材料将被消耗，原有属性与羁绊随之移除。",24,286,512,30,16,new Color(.79f,.69f,.68f));
         modalValid=()=>Ready() && ForgeRowsUnchanged(material,target) && BodyForgeSettings.Current.Enabled;
         ModalButton(card,"取消",24,330,160,38,CancelForgeModal);
         ModalButton(card,"确认锻体",200,330,336,38,()=>{
@@ -211,17 +212,20 @@ public sealed partial class BodyForgePanel
     }
     private void ShowForgeResult()
     {
+        int repeatRarity=lastForgeRarity;
         var card=BeginForgeModal("锻体结果",560,350,null);
         ModalText(card,forgeMessage,24,64,512,76,18,new Color(1,.86f,.60f));
         ModalText(card,forgeResults,24,146,512,116,18,new Color(.92f,.89f,.85f));
         ModalButton(card,"查看收益",24,290,244,38,()=>OpenForgeProgress(0));
-        ModalButton(card,"继续锻体",284,290,252,38,()=>{
+        ModalButton(card,CanChooseMilestone()?"领取里程碑奖励":"继续锻体",284,290,252,38,()=>{
             CloseForgeModal();
             if(forgeBlocked)
             {
                 RecoverForge();
                 if(forgeBlocked){OpenForgeHub();return;}
             }
+            if(CanChooseMilestone()){OpenMilestoneChoices();return;}
+            if(repeatRarity>=0){string error=StartExternalForge(repeatRarity);if(error!=null){forgeMessage=error;OpenForgeHub();}return;}
             BeginNativeForge();
             if(!NativeActive){forgeMessage=nativeHint;OpenForgeHub();}
         });
@@ -249,6 +253,10 @@ public sealed partial class BodyForgePanel
     private static string RewardIconCategory(string id)
     {
         if(string.IsNullOrEmpty(id))return "";
+        if(id.StartsWith("ALL_PLAYER_",StringComparison.Ordinal))return "PARTY";
+        if(id=="LUCK")return "FORTUNE";
+        if(id=="DASH_ATTACK_DAMAGE")return "COMET";
+        if(id=="FINAL_WEAPONDAMAGE")return "WEAPON";
         if(id.StartsWith("FROST_RELIC_",StringComparison.Ordinal)||id.StartsWith("CHARGING_CHARM_",StringComparison.Ordinal))return "FROST";
         if(id.StartsWith("FLAME_SWORD_",StringComparison.Ordinal))return "FLAMESWORD";
         if(id.StartsWith("DARK_CLOUD_",StringComparison.Ordinal)||id=="MIN_DARK_CLOUD")return "DARKCLOUD";
@@ -257,9 +265,10 @@ public sealed partial class BodyForgePanel
         if(id.StartsWith("ELECTRIC_",StringComparison.Ordinal))return "MAGITECH";
         if(id.StartsWith("DEBUFF_",StringComparison.Ordinal))return "CURSE";
         if(id.StartsWith("FOLLOWER_",StringComparison.Ordinal))return "COMPANION";
-        if(id=="NEGOTIATION"||id=="LEAF_DROP")return "SAVVY";
+        if(id.StartsWith("PLANET_",StringComparison.Ordinal))return "PLANET";
+        if(id=="NEGOTIATION"||id=="LEAF_DROP"||id=="EXP_DROP")return "SAVVY";
         if(id.StartsWith("MAGIC_",StringComparison.Ordinal))return "ACADEMY";
-        if(id=="MP_REGEN_MULTIPLE"||id=="FINAL_MP")return "LAKE";
+        if(id=="MP_REGEN_MULTIPLE"||id=="FINAL_MP"||id=="MP_SKILL_DAMAGE")return "LAKE";
         if(id=="DASH_COUNT")return "SHADOW";
         return "";
     }

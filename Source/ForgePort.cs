@@ -18,6 +18,8 @@ internal sealed class ForgePort : IForgePort
     private readonly double[] samples;
     private readonly ForgeEffectGate effects=new ForgeEffectGate();
     private bool subscribed;
+    private readonly bool complimentary;
+    private bool complimentaryConsumed;
     private readonly Action onConsume,onEnchant;
     private readonly Action<ForgeReward> onReward;
     private readonly Func<int,bool> rewardAllowed;
@@ -29,11 +31,12 @@ internal sealed class ForgePort : IForgePort
     internal ForgePort(PlayerAvatar player,ItemPosition materialPosition,NewItemOwnInstance material,
         ItemPosition targetPosition,int targetID,ForgeReward[] rewards,Func<bool> validPlayer,
         Action onConsume,Action onEnchant,Action<ForgeReward> onReward,bool hasTarget=true,Func<int,bool> rewardAllowed=null,
-        int subBag=-1,int subBagInstance=0,int subBagQuantity=0,int subBagEntity=0)
+        int subBag=-1,int subBagInstance=0,int subBagQuantity=0,int subBagEntity=0,bool complimentary=false)
     {
         materialSubBag=subBag;
-        this.player=player; this.materialPosition=materialPosition; materialID=subBag<0?material.InstanceID:subBagInstance;
-        quantity=subBag<0?material.Quantity:subBagQuantity; this.targetPosition=targetPosition; this.targetID=targetID;
+        this.complimentary=complimentary;
+        this.player=player; this.materialPosition=materialPosition; materialID=complimentary?subBagInstance:subBag<0?material.InstanceID:subBagInstance;
+        quantity=complimentary?1:subBag<0?material.Quantity:subBagQuantity; this.targetPosition=targetPosition; this.targetID=targetID;
         this.rewards=rewards; this.validPlayer=validPlayer;
         this.hasTarget=hasTarget;
         this.rewardAllowed=rewardAllowed;
@@ -43,7 +46,7 @@ internal sealed class ForgePort : IForgePort
         samples=new double[rewards.Length];
         transactionID=Guid.NewGuid().ToString("N");
         journalPath=Path.Combine(Path.GetDirectoryName(typeof(BodyForgeMod).Assembly.Location),"forge-history.jsonl");
-        string plan="plan materialEntity="+(subBag<0?material.EntityID:subBagEntity)+" subBag="+subBag+" quantity=1 rewards=";
+        string plan="plan complimentary="+complimentary+" materialEntity="+(complimentary?0:subBag<0?material.EntityID:subBagEntity)+" subBag="+subBag+" quantity="+(complimentary?0:1)+" rewards=";
         foreach(var reward in rewards) plan+=reward.Metadata+";";
         Record(plan); // Fail before consuming if the journal cannot be written.
     }
@@ -61,6 +64,7 @@ internal sealed class ForgePort : IForgePort
     }
     public int MaterialState()
     {
+        if(complimentary)return complimentaryConsumed?1:0;
         var inventory=player.Inventory;
         if(materialSubBag>=0)
         {
@@ -132,6 +136,7 @@ internal sealed class ForgePort : IForgePort
     {
         if(MaterialState()!=0)throw new InvalidOperationException("材料已移动或数量变化，未发送消耗请求");
         ArmEffects();
+        if(complimentary){complimentaryConsumed=true;effects.Refreshed();return;}
         if(materialSubBag>=0)inventory.DecreaseSubBagItemQuantity((sbyte)materialSubBag,1);
         else inventory.DecreaseItemQuantity(materialPosition.x,materialPosition.y,1);
     }
@@ -147,7 +152,7 @@ internal sealed class ForgePort : IForgePort
             if(player.Inventory.CurrentInventoryStorage>=120)throw new InvalidOperationException("背包已达 120 格，未执行扩容");
             player.Inventory.AddStorage(1);return;
         }
-        if(player.isServer) player.AddOrphanedStatusInstance(StatusDatabase.CreateStatusEntity(rewards[index].Metadata));
+        if(player.isServer) ForgePermanentStats.Apply(player,rewards[index].Metadata);
         else player.CmdAddOrphanedStatusInstance(rewards[index].Metadata);
     }
     public void Record(string message)

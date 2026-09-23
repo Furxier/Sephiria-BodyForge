@@ -38,7 +38,7 @@ public sealed partial class BodyForgePanel
             if(NativeActive) { CancelNative("已取消锻体，已发出的请求仍可能生效"); return; }
             if(forgeBlocked) { RecoverForge(); nativeHint=forgeMessage; return; }
             if(milestones.Settling(Time.realtimeSinceStartup))
-            { nativeHint="扩容正在同步，请稍后继续锻体。";forgeMessage=nativeHint;OpenForgeHub();return; }
+            { nativeHint="里程碑奖励正在同步，请稍后继续锻体。";forgeMessage=nativeHint;OpenForgeHub();return; }
             if(!NativeContextValid() || ForgeBusy || NativePickerBusy())
             { nativeHint="请关闭其他操作界面，并放下正在拖动的道具。"; return; }
             var holder=UIManager.Instance.GetElement<UI_MessageBoxHolder>();
@@ -92,6 +92,7 @@ public sealed partial class BodyForgePanel
     private bool NativeRowUnchanged(ForgeRow row)
     {
         if(row==null || !Ready()) return false;
+        if(row.Complimentary)return object.ReferenceEquals(row,nativeMaterialRow) && NativeActive;
         if(row.SubBag>=0)
         {
             ItemMetadata item;
@@ -133,7 +134,7 @@ public sealed partial class BodyForgePanel
         try
         {
             if(milestones.Settling(Time.realtimeSinceStartup))
-            { CancelNative("扩容正在同步，尚未消耗材料，请稍后继续锻体。");forgeMessage=nativeHint;OpenForgeHub();return; }
+            { CancelNative("里程碑奖励正在同步，尚未消耗材料，请稍后继续锻体。");forgeMessage=nativeHint;OpenForgeHub();return; }
             if(!NativeContextValid() || !NativeRowsUnchanged() || NativePickerBusy())
             { CancelNative("材料、目标或背包状态已变化，未吞噬"); return; }
             nativeStep=NativeStep.Running;

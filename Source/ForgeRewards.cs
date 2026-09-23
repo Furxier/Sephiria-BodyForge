@@ -14,12 +14,16 @@ internal sealed class ForgeReward
     {
         if(Kind==7)return "+"+value+" 格";
         var id=Metadata.Split('/')[0];var entity=StatusDatabase.GetStatusEntity(id);
+        if(id=="FROSTBITE_DAMAGE")return value.ToString("+0;-0;0",System.Globalization.CultureInfo.InvariantCulture)+"%";
+        if(id=="HP_STEAL")return (value/10.0).ToString("+0.#;-0.#;0",System.Globalization.CultureInfo.InvariantCulture)+"%";
         return ((double)value/Math.Max(1,entity.divideForDisplay)).ToString("+0.#;-0.#;0",System.Globalization.CultureInfo.InvariantCulture)+Clean(StatusDatabase.GetStatusSymbol(id));
     }
     private static string Describe(string id,int value)
     {
+        if(id=="FROSTBITE_DAMAGE")return "冻伤伤害 "+value.ToString("+0;-0;0",System.Globalization.CultureInfo.InvariantCulture)+"%（每层·冰伤/秒）";
         string name=Clean(StatusDatabase.GetStatusName(id)).Trim();
         if(string.IsNullOrEmpty(name))throw new InvalidOperationException("奖励属性名称缺失，请重新读取属性池");
+        if(id=="HP_STEAL")return name+" "+(value/10.0).ToString("+0.#;-0.#;0",System.Globalization.CultureInfo.InvariantCulture)+"%";
         var entity=StatusDatabase.GetStatusEntity(id);
         string number=((double)value/Math.Max(1,entity.divideForDisplay)).ToString("+0.#;-0.#;0",System.Globalization.CultureInfo.InvariantCulture);
         string symbol=Clean(StatusDatabase.GetStatusSymbol(id));
